@@ -1,8 +1,10 @@
 import glob
 import os
 import random
+import traceback
 from typing import List
 
+import psutil
 from loguru import logger
 from moviepy import (
     AudioFileClip,
@@ -167,18 +169,51 @@ def combine_videos(
     clips = [CompositeVideoClip([clip]) for clip in clips]
     video_clip = concatenate_videoclips(clips)
     video_clip = video_clip.with_fps(30)
-    logger.info("writing")
+    logger.info("writing video file...")
     # https://github.com/harry0703/MoneyPrinterTurbo/issues/111#issuecomment-2032354030
-    video_clip.write_videofile(
-        filename=combined_video_path,
-        threads=threads,
-        logger=None,
-        temp_audiofile_path=output_dir,
-        audio_codec="aac",
-        fps=30,
-    )
-    video_clip.close()
-    logger.success("completed")
+    try:
+        # Log memory usage and video clip info
+        logger.info(f"Memory usage before writing: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
+        logger.info(f"Video clip info - Duration: {video_clip.duration}, FPS: {video_clip.fps}, Size: {video_clip.size}")
+
+        # Reduce video resolution to save memory
+        video_clip = video_clip.resized(width=720, height=1280)  # Lower resolution
+
+        # Write the video file with optimized settings
+        video_clip.write_videofile(
+            filename=combined_video_path,
+            threads=threads,
+            logger=None,
+            temp_audiofile_path=output_dir,
+            audio_codec="aac",
+            codec="libx264",  # Explicitly set video codec
+            fps=30,
+            bitrate="2000k",  # Lower bitrate
+            preset="ultrafast",  # Faster encoding
+            ffmpeg_params=["-crf", "28"]  # Lower quality for smaller file size
+        )
+
+        # Log success and file size
+        if os.path.exists(combined_video_path):
+            logger.info(f"Video file written successfully. Size: {os.path.getsize(combined_video_path) / 1024 / 1024:.2f} MB")
+        else:
+            logger.error(f"Video file not found after writing: {combined_video_path}")
+
+        logger.info(f"Memory usage after writing: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
+    except Exception as e:
+        logger.error(f"Error writing video file: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        # Try to create an empty file to indicate an error occurred
+        with open(f"{combined_video_path}.error.txt", "w") as f:
+            f.write(f"Error: {str(e)}\n{traceback.format_exc()}")
+        raise
+    finally:
+        try:
+            video_clip.close()
+            logger.info("Video clip closed successfully")
+        except Exception as e:
+            logger.error(f"Error closing video clip: {str(e)}")
+    logger.success("Video generation completed")
     return combined_video_path
 
 
@@ -347,17 +382,47 @@ def generate_video(
             logger.error(f"failed to add bgm: {str(e)}")
 
     video_clip = video_clip.with_audio(audio_clip)
-    video_clip.write_videofile(
-        output_file,
-        audio_codec="aac",
-        temp_audiofile_path=output_dir,
-        threads=params.n_threads or 2,
-        logger=None,
-        fps=30,
-    )
-    video_clip.close()
-    del video_clip
-    logger.success("completed")
+    try:
+        # Log memory usage and video clip info
+        logger.info(f"Memory usage before writing final video: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
+        logger.info(f"Final video clip info - Duration: {video_clip.duration}, FPS: {video_clip.fps}, Size: {video_clip.size}")
+
+        # Write the video file with optimized settings
+        video_clip.write_videofile(
+            output_file,
+            audio_codec="aac",
+            codec="libx264",  # Explicitly set video codec
+            temp_audiofile_path=output_dir,
+            threads=params.n_threads or 2,
+            logger=None,
+            fps=30,
+            bitrate="2000k",  # Lower bitrate
+            preset="ultrafast",  # Faster encoding
+            ffmpeg_params=["-crf", "28"]  # Lower quality for smaller file size
+        )
+
+        # Log success and file size
+        if os.path.exists(output_file):
+            logger.info(f"Final video file written successfully. Size: {os.path.getsize(output_file) / 1024 / 1024:.2f} MB")
+        else:
+            logger.error(f"Final video file not found after writing: {output_file}")
+
+        logger.info(f"Memory usage after writing final video: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
+    except Exception as e:
+        logger.error(f"Error writing final video file: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        # Try to create an empty file to indicate an error occurred
+        with open(f"{output_file}.error.txt", "w") as f:
+            f.write(f"Error: {str(e)}\n{traceback.format_exc()}")
+        raise
+    finally:
+        try:
+            video_clip.close()
+            del video_clip
+            logger.info("Final video clip closed and deleted successfully")
+        except Exception as e:
+            logger.error(f"Error closing final video clip: {str(e)}")
+    logger.success("Final video generation completed")
 
 
 def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
