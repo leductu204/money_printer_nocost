@@ -595,10 +595,44 @@ with middle_panel:
     with st.container(border=True):
         st.write(tr("Audio Settings"))
 
-        # tts_providers = ['edge', 'azure']
-        # tts_provider = st.selectbox(tr("TTS Provider"), tts_providers)
+        # Add voice provider selection
+        tts_providers = ['Azure', 'OpenAI']
+        saved_tts_provider = config.app.get("tts_provider", "Azure").lower()
+        saved_tts_provider_index = 0
+        for i, provider in enumerate(tts_providers):
+            if provider.lower() == saved_tts_provider:
+                saved_tts_provider_index = i
+                break
 
-        voices = voice.get_all_azure_voices(filter_locals=support_locales)
+        tts_provider = st.selectbox(
+            tr("TTS Provider"),
+            options=tts_providers,
+            index=saved_tts_provider_index,
+        )
+        tts_provider = tts_provider.lower()
+        config.app["tts_provider"] = tts_provider
+
+        # Show OpenAI TTS settings if OpenAI is selected
+        if tts_provider == "openai":
+            st.info("""
+            ##### OpenAI TTS Configuration
+            - Uses the same API key as OpenAI LLM
+            - Available voices: alloy, echo, fable, onyx, nova, shimmer
+            - Higher quality model (tts-1-hd) can be used by editing config.toml
+            """)
+
+            # For OpenAI, we'll use a simple list of voices
+            voices = [
+                "openai-alloy-Male",
+                "openai-echo-Male",
+                "openai-fable-Female",
+                "openai-onyx-Male",
+                "openai-nova-Female",
+                "openai-shimmer-Female"
+            ]
+        else:
+            # For Azure, use the full list of Azure voices
+            voices = voice.get_all_azure_voices(filter_locals=support_locales)
         friendly_names = {
             v: v.replace("Female", tr("Female"))
             .replace("Male", tr("Male"))

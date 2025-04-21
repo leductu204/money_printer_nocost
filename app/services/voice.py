@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import time
 from datetime import datetime
 from typing import Union
 from xml.sax.saxutils import unescape
@@ -10,6 +11,7 @@ from edge_tts import SubMaker, submaker
 from edge_tts.submaker import mktimestamp
 from loguru import logger
 from moviepy.video.tools import subtitles
+from openai import OpenAI
 
 from app.config import config
 from app.utils import utils
@@ -18,6 +20,22 @@ from app.utils import utils
 def get_all_azure_voices(filter_locals=None) -> list[str]:
     if filter_locals is None:
         filter_locals = ["zh-CN", "en-US", "zh-HK", "zh-TW", "vi-VN"]
+
+    # Start with OpenAI voices
+    voices = []
+
+    # Add OpenAI voices if no filter or if 'en' is in filter_locals
+    if not filter_locals or any("en" in fl.lower() for fl in filter_locals):
+        voices.extend([
+            "openai-alloy-Male",
+            "openai-echo-Male",
+            "openai-fable-Female",
+            "openai-onyx-Male",
+            "openai-nova-Female",
+            "openai-shimmer-Female"
+        ])
+
+    # Add Azure voices
     voices_str = """
 Name: af-ZA-AdriNeural
 Gender: Female
@@ -1047,11 +1065,36 @@ def is_azure_v2_voice(voice_name: str):
     return ""
 
 
+def is_openai_voice(voice_name: str):
+    voice_name = parse_voice_name(voice_name)
+    if voice_name.startswith("openai-"):
+        return voice_name.replace("openai-", "").strip()
+    return ""
+
+
 def tts(
     text: str, voice_name: str, voice_rate: float, voice_file: str
 ) -> Union[SubMaker, None]:
-    if is_azure_v2_voice(voice_name):
+    # Check if voice name explicitly indicates a provider
+    openai_voice = is_openai_voice(voice_name)
+    if openai_voice:
+        return openai_tts(text, openai_voice, voice_rate, voice_file)
+    elif is_azure_v2_voice(voice_name):
         return azure_tts_v2(text, voice_name, voice_file)
+
+    # If no provider is indicated in the voice name, use the configured provider
+    tts_provider = config.app.get("tts_provider", "azure").lower()
+    if tts_provider == "openai" and not openai_voice:
+        # For OpenAI, use the voice name as is (alloy, echo, etc.)
+        # If it's an Azure voice, extract just the name part
+        if "-" in voice_name:
+            # This is likely an Azure voice, so we'll use a default OpenAI voice
+            logger.warning(f"Using default OpenAI voice 'alloy' instead of Azure voice {voice_name}")
+            return openai_tts(text, "alloy", voice_rate, voice_file)
+        else:
+            return openai_tts(text, voice_name, voice_rate, voice_file)
+
+    # Default to Azure TTS v1
     return azure_tts_v1(text, voice_name, voice_rate, voice_file)
 
 
@@ -1097,6 +1140,78 @@ def azure_tts_v1(
             return sub_maker
         except Exception as e:
             logger.error(f"failed, error: {str(e)}")
+    return None
+
+
+def openai_tts(text: str, voice_name: str, voice_rate: float, voice_file: str) -> Union[SubMaker, None]:
+    text = text.strip()
+
+    # Extract the actual voice name from the format "openai-voice-Gender"
+    if voice_name.startswith("openai-"):
+        parts = voice_name.split("-")
+        if len(parts) >= 2:
+            voice_name = parts[1]  # Get the actual voice name (alloy, echo, etc.)
+
+    for i in range(3):
+        try:
+            logger.info(f"start OpenAI TTS, voice name: {voice_name}, try: {i + 1}")
+
+            # Get OpenAI API key from config
+            api_key = config.app.get("openai_api_key", "")
+            base_url = config.app.get("openai_base_url", "")
+
+            if not api_key:
+                logger.error("OpenAI API key not found in config")
+                return None
+
+            # Create OpenAI client
+            client = OpenAI(api_key=api_key, base_url=base_url if base_url else None)
+
+            # Create SubMaker for subtitle generation
+            sub_maker = SubMaker()
+
+            # Adjust speed based on voice_rate
+            speed = voice_rate
+
+            # Get TTS model from config or use default
+            tts_model = config.app.get("openai_tts_model", "tts-1")
+
+            # Call OpenAI TTS API with streaming response
+            with client.audio.speech.with_streaming_response.create(
+                model=tts_model,  # tts-1 or tts-1-hd for higher quality
+                voice=voice_name,  # alloy, echo, fable, onyx, nova, or shimmer
+                input=text,
+                speed=speed
+            ) as response:
+                # Save the audio file
+                with open(voice_file, 'wb') as f:
+                    for chunk in response.iter_bytes():
+                        f.write(chunk)
+
+            # Since OpenAI TTS doesn't provide word boundaries, we need to estimate them
+            # This is a simple approach - for better results, you might need to use a speech recognition service
+            words = text.split()
+            total_chars = len(text)
+
+            # Get file size to estimate duration
+            file_size = os.path.getsize(voice_file)
+            # Rough estimate: ~10KB per second for MP3
+            estimated_duration_ms = (file_size / 10000) * 1000
+
+            # Create approximate word boundaries
+            offset = 0
+            for word in words:
+                # Estimate word duration based on its length relative to total text
+                word_duration = int((len(word) / total_chars) * estimated_duration_ms * 10000)
+                sub_maker.create_sub((offset, word_duration), word)
+                offset += word_duration
+
+            logger.info(f"completed, output file: {voice_file}")
+            return sub_maker
+
+        except Exception as e:
+            logger.error(f"OpenAI TTS failed, error: {str(e)}")
+
     return None
 
 
