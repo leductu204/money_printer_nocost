@@ -1,6 +1,7 @@
 import math
 import os.path
 import re
+import traceback
 from os import path
 
 from loguru import logger
@@ -173,16 +174,27 @@ def generate_final_videos(
             utils.task_dir(task_id), f"combined-{index}.mp4"
         )
         logger.info(f"\n\n## combining video: {index} => {combined_video_path}")
-        video.combine_videos(
-            combined_video_path=combined_video_path,
-            video_paths=downloaded_videos,
-            audio_file=audio_file,
-            video_aspect=params.video_aspect,
-            video_concat_mode=video_concat_mode,
-            video_transition_mode=video_transition_mode,
-            max_clip_duration=params.video_clip_duration,
-            threads=params.n_threads,
-        )
+        try:
+            video.combine_videos(
+                combined_video_path=combined_video_path,
+                video_paths=downloaded_videos,
+                audio_file=audio_file,
+                video_aspect=params.video_aspect,
+                video_concat_mode=video_concat_mode,
+                video_transition_mode=video_transition_mode,
+                max_clip_duration=params.video_clip_duration,
+                min_clip_duration=1.5,  # Thêm tham số thời lượng tối thiểu 1.5 giây
+                threads=params.n_threads,
+            )
+        except Exception as e:
+            logger.error(f"Error combining videos: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # Create an error file to indicate the error
+            with open(f"{combined_video_path}.error.txt", "w") as f:
+                f.write(f"Error: {str(e)}\n{traceback.format_exc()}")
+            # Update task state to failed
+            sm.state.update_task(task_id, state=const.TASK_STATE_FAILED)
+            return None, None
 
         _progress += 50 / params.video_count / 2
         sm.state.update_task(task_id, progress=_progress)
@@ -190,13 +202,23 @@ def generate_final_videos(
         final_video_path = path.join(utils.task_dir(task_id), f"final-{index}.mp4")
 
         logger.info(f"\n\n## generating video: {index} => {final_video_path}")
-        video.generate_video(
-            video_path=combined_video_path,
-            audio_path=audio_file,
-            subtitle_path=subtitle_path,
-            output_file=final_video_path,
-            params=params,
-        )
+        try:
+            video.generate_video(
+                video_path=combined_video_path,
+                audio_path=audio_file,
+                subtitle_path=subtitle_path,
+                output_file=final_video_path,
+                params=params,
+            )
+        except Exception as e:
+            logger.error(f"Error generating final video: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # Create an error file to indicate the error
+            with open(f"{final_video_path}.error.txt", "w") as f:
+                f.write(f"Error: {str(e)}\n{traceback.format_exc()}")
+            # Update task state to failed
+            sm.state.update_task(task_id, state=const.TASK_STATE_FAILED)
+            return None, None
 
         _progress += 50 / params.video_count / 2
         sm.state.update_task(task_id, progress=_progress)

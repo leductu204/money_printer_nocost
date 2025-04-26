@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import streamlit as st
 from loguru import logger
+from ffmpeg_settings import add_ffmpeg_settings_to_ui
 
 # Add the root directory of the project to the system path to allow importing modules from the project
 root_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -29,9 +30,9 @@ from app.utils import utils
 
 st.set_page_config(
     page_title="MoneyPrinterTurbo",
-    page_icon="🤖",
+    page_icon="🎬",
     layout="wide",
-    initial_sidebar_state="auto",
+    initial_sidebar_state="expanded",
     menu_items={
         "Report a bug": "https://github.com/harry0703/MoneyPrinterTurbo/issues",
         "About": "# MoneyPrinterTurbo\nSimply provide a topic or keyword for a video, and it will "
@@ -101,9 +102,10 @@ def open_task_folder(task_id):
         path = os.path.join(root_dir, "storage", "tasks", task_id)
         if os.path.exists(path):
             if sys == "Windows":
-                os.system(f"start {path}")
+                # Use quotes around the path to handle spaces
+                os.system(f'start "" "{path}"')
             if sys == "Darwin":
-                os.system(f"open {path}")
+                os.system(f'open "{path}"')
     except Exception as e:
         logger.error(e)
 
@@ -430,6 +432,10 @@ if not config.app.get("hide_config", False):
                 tr("Pixabay API Key"), value=pixabay_api_key, type="password"
             )
             save_keys_to_config("pixabay_api_keys", pixabay_api_key)
+
+            # Add FFMPEG settings
+            st.markdown("---")
+            ffmpeg_settings = add_ffmpeg_settings_to_ui()
 
 panel = st.columns(3)
 left_panel = panel[0]
