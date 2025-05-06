@@ -12,6 +12,7 @@ from edge_tts.submaker import mktimestamp
 from loguru import logger
 from moviepy.video.tools import subtitles
 from openai import OpenAI
+import requests
 
 from app.config import config
 from app.utils import utils
@@ -32,7 +33,18 @@ def get_all_azure_voices(filter_locals=None) -> list[str]:
             "openai-fable-Female",
             "openai-onyx-Male",
             "openai-nova-Female",
-            "openai-shimmer-Female"
+            "openai-shimmer-Female",
+            "openai_fm-alloy-Unisex",
+            "openai_fm-ash-Unisex",
+            "openai_fm-ballad-Unisex",
+            "openai_fm-coral-Unisex",
+            "openai_fm-echo-Unisex",
+            "openai_fm-fable-Unisex",
+            "openai_fm-onyx-Unisex",
+            "openai_fm-nova-Unisex",
+            "openai_fm-sage-Unisex",
+            "openai_fm-shimmer-Unisex",
+            "openai_fm-verse-Unisex"
         ])
 
     # Add Azure voices
@@ -1071,6 +1083,12 @@ def is_openai_voice(voice_name: str):
         return voice_name.replace("openai-", "").strip()
     return ""
 
+def is_openai_fm_voice(voice_name: str):
+    voice_name = parse_voice_name(voice_name)
+    if voice_name.startswith("openai_fm-"):
+        return voice_name.replace("openai_fm-", "").strip()
+    return ""
+
 
 def tts(
     text: str, voice_name: str, voice_rate: float, voice_file: str
@@ -1081,6 +1099,8 @@ def tts(
         return openai_tts(text, openai_voice, voice_rate, voice_file)
     elif is_azure_v2_voice(voice_name):
         return azure_tts_v2(text, voice_name, voice_file)
+    elif is_openai_fm_voice(voice_name):
+        return openai_fm_tts(text, voice_name, voice_rate, voice_file)
 
     # If no provider is indicated in the voice name, use the configured provider
     tts_provider = config.app.get("tts_provider", "azure").lower()
@@ -1093,6 +1113,8 @@ def tts(
             return openai_tts(text, "alloy", voice_rate, voice_file)
         else:
             return openai_tts(text, voice_name, voice_rate, voice_file)
+    elif tts_provider == "openai_fm":
+        return openai_fm_tts(text, voice_name, voice_rate, voice_file)
 
     # Default to Azure TTS v1
     return azure_tts_v1(text, voice_name, voice_rate, voice_file)
@@ -1211,6 +1233,97 @@ def openai_tts(text: str, voice_name: str, voice_rate: float, voice_file: str) -
 
         except Exception as e:
             logger.error(f"OpenAI TTS failed, error: {str(e)}")
+
+    return None
+
+
+def openai_fm_tts(text: str, voice_name: str, voice_rate: float, voice_file: str) -> Union[SubMaker, None]:
+    voice_name = is_openai_fm_voice(voice_name)
+    if not voice_name:
+        logger.error(f"invalid OpenAI FM voice name: {voice_name}")
+        raise ValueError(f"invalid OpenAI FM voice name: {voice_name}")
+    text = text.strip()
+
+    for i in range(3):
+        try:
+            logger.info(f"start OpenAI FM TTS, voice name: {voice_name}, try: {i + 1}")
+
+            # Prepare headers from the provided demo_openai_api.py
+            headers = {
+                "accept": "*/*",
+                "accept-language": "vi-VN,vi;q=0.9,zh-CN;q=0.8,zh;q=0.7,fr-FR;q=0.6,fr;q=0.5,en-US;q=0.4,en;q=0.3",
+                "origin": "https://www.openai.fm",
+                "priority": "u=1, i",
+                "referer": "https://www.openai.fm/worker-444eae9e2e1bdd6edd8969f319655e70.js",
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-origin",
+                "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
+                "Cookie": "_ga=GA1.1.600869161.1743481050; _ga_NME7NXL4L0=GS1.1.1745957564.11.1.1745958401.0.0.0"
+            }
+
+            # Get tone from config
+            tone = config.app.get("openai_fm_tone", "Calm, encouraging, and articulate")
+            
+            # Prepare prompt based on the selected tone
+            if tone == "Calm, encouraging, and articulate":
+                prompt = "Accent/Affect: Warm, refined, and gently instructive, reminiscent of a friendly art instructor. Tone: Calm, encouraging, and articulate, clearly describing each step with patience. Pacing: Slow and deliberate, pausing often to allow the listener to follow instructions comfortably. Emotion: Cheerful, supportive, and pleasantly enthusiastic; convey genuine enjoyment and appreciation of art. Pronunciation: Clearly articulate artistic terminology (e.g., 'brushstrokes,' 'landscape,' 'palette') with gentle emphasis. Personality Affect: Friendly and approachable with a hint of sophistication; speak confidently and reassuringly, guiding users through each painting step patiently and warmly."
+            elif tone == "Friendly, clear, and reassuring":
+                prompt = "Affect/personality: A cheerful guide. Tone: Friendly, clear, and reassuring, creating a calm atmosphere and making the listener feel confident and comfortable. Pronunciation: Clear, articulate, and steady, ensuring each instruction is easily understood while maintaining a natural, conversational flow. Pause: Brief, purposeful pauses after key instructions (e.g., 'cross the street' and 'turn right') to allow time for the listener to process the information and follow along. Emotion: Warm and supportive, conveying empathy and care, ensuring the listener feels guided and safe throughout the journey."
+            else:  # Neutral and informative
+                prompt = "Voice: Clear, authoritative, and composed, projecting confidence and professionalism. Tone: Neutral and informative, maintaining a balance between formality and approachability. Punctuation: Structured with commas and pauses for clarity, ensuring information is digestible and well-paced. Delivery: Steady and measured, with slight emphasis on key figures and deadlines to highlight critical points."
+
+            # Prepare payload as dictionary per the demo_openai_api.py
+            payload = {
+                "input": text,
+                "prompt": prompt,
+                "voice": voice_name.split('-')[0].strip(),
+                "vibe": "null"
+            }
+
+            # Make request to OpenAI FM API
+            response = requests.post(
+                "https://www.openai.fm/api/generate",
+                headers=headers,
+                data=payload,
+                timeout=(30, 60)
+            )
+
+            if response.status_code != 200:
+                logger.error(f"OpenAI FM TTS request failed with status code: {response.status_code}, response: {response.text}")
+                continue
+
+            # Create SubMaker for subtitle generation
+            sub_maker = SubMaker()
+
+            # Save the audio file from response content
+            with open(voice_file, 'wb') as f:
+                f.write(response.content)
+            
+            logger.info(f"Audio file saved successfully at: {voice_file}")
+
+            # Since OpenAI FM TTS might not provide word boundaries, we need to estimate them
+            words = text.split()
+            total_chars = len(text)
+
+            # Get file size to estimate duration
+            file_size = os.path.getsize(voice_file)
+            # Rough estimate: ~10KB per second for MP3
+            estimated_duration_ms = (file_size / 10000) * 1000
+
+            # Create approximate word boundaries
+            offset = 0
+            for word in words:
+                # Estimate word duration based on its length relative to total text
+                word_duration = int((len(word) / total_chars) * estimated_duration_ms * 10000)
+                sub_maker.create_sub((offset, word_duration), word)
+                offset += word_duration
+
+            logger.info(f"completed, output file: {voice_file}")
+            return sub_maker
+
+        except Exception as e:
+            logger.error(f"OpenAI FM TTS failed, error: {str(e)}")
 
     return None
 

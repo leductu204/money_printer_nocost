@@ -1,4 +1,5 @@
 import os
+import os
 import platform
 import sys
 from uuid import uuid4
@@ -601,44 +602,58 @@ with middle_panel:
     with st.container(border=True):
         st.write(tr("Audio Settings"))
 
-        # Add voice provider selection
-        tts_providers = ['Azure', 'OpenAI']
+        # Only display OpenAI FM in UI, but keep backend logic for other providers
+        tts_providers_display = ['OpenAI FM']
         saved_tts_provider = config.app.get("tts_provider", "Azure").lower()
         saved_tts_provider_index = 0
-        for i, provider in enumerate(tts_providers):
+        all_providers = ['Azure', 'OpenAI', 'OpenAI FM']
+        for i, provider in enumerate(all_providers):
             if provider.lower() == saved_tts_provider:
                 saved_tts_provider_index = i
                 break
 
         tts_provider = st.selectbox(
             tr("TTS Provider"),
-            options=tts_providers,
-            index=saved_tts_provider_index,
+            options=tts_providers_display,
+            index=0,
         )
         tts_provider = tts_provider.lower()
         config.app["tts_provider"] = tts_provider
 
-        # Show OpenAI TTS settings if OpenAI is selected
-        if tts_provider == "openai":
-            st.info("""
-            ##### OpenAI TTS Configuration
-            - Uses the same API key as OpenAI LLM
-            - Available voices: alloy, echo, fable, onyx, nova, shimmer
-            - Higher quality model (tts-1-hd) can be used by editing config.toml
-            """)
+        st.info("""
+        ##### OpenAI FM TTS Configuration
+        - Available voices: alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer, verse
+        - Customize tone below
+        """)
 
-            # For OpenAI, we'll use a simple list of voices
-            voices = [
-                "openai-alloy-Male",
-                "openai-echo-Male",
-                "openai-fable-Female",
-                "openai-onyx-Male",
-                "openai-nova-Female",
-                "openai-shimmer-Female"
-            ]
-        else:
-            # For Azure, use the full list of Azure voices
-            voices = voice.get_all_azure_voices(filter_locals=support_locales)
+        # For OpenAI FM, we'll use a list of voices specific to OpenAI FM
+        voices = [
+            "openai_fm-alloy-Unisex",
+            "openai_fm-ash-Unisex",
+            "openai_fm-ballad-Unisex",
+            "openai_fm-coral-Unisex",
+            "openai_fm-echo-Unisex",
+            "openai_fm-fable-Unisex",
+            "openai_fm-onyx-Unisex",
+            "openai_fm-nova-Unisex",
+            "openai_fm-sage-Unisex",
+            "openai_fm-shimmer-Unisex",
+            "openai_fm-verse-Unisex"
+        ]
+
+        # Add settings for tone for OpenAI FM as per the provided file
+        tone_options = [
+            "Calm, encouraging, and articulate",
+            "Friendly, clear, and reassuring",
+            "Neutral and informative"
+        ]
+        selected_tone = st.selectbox(
+            tr("Tone and Style"),
+            options=tone_options,
+            index=0,
+        )
+        config.app["openai_fm_tone"] = selected_tone
+
         friendly_names = {
             v: v.replace("Female", tr("Female"))
             .replace("Male", tr("Male"))
@@ -696,7 +711,8 @@ with middle_panel:
                     )
 
                 if sub_maker and os.path.exists(audio_file):
-                    st.audio(audio_file, format="audio/mp3")
+                    st.audio(audio_file, format="audio/mp3", start_time=0)
+                    logger.info(f"Voice file created and playable at: {audio_file}")
                     if os.path.exists(audio_file):
                         os.remove(audio_file)
 
@@ -716,12 +732,14 @@ with middle_panel:
             tr("Speech Volume"),
             options=[0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 3.0, 4.0, 5.0],
             index=2,
+            key="voice_volume_selectbox"
         )
 
         params.voice_rate = st.selectbox(
             tr("Speech Rate"),
             options=[0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 1.8, 2.0],
             index=2,
+            key="voice_rate_selectbox"
         )
 
         bgm_options = [
