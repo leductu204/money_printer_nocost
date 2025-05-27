@@ -1,6 +1,13 @@
 import os
+import sys
 import streamlit as st
 import psutil
+
+# Add the root directory of the project to the system path to allow importing modules from the project
+root_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
+
 from app.config import config
 
 def add_ffmpeg_settings_to_ui():
@@ -9,26 +16,26 @@ def add_ffmpeg_settings_to_ui():
     This function should be called in the Basic Settings expander in Main.py
     """
     st.write("**FFMPEG Settings**")
-    
+
     # Get current ffmpeg path from config
     current_ffmpeg_path = config.app.get("ffmpeg_path", "")
-    
+
     # Display ffmpeg path input
     ffmpeg_path = st.text_input(
-        "FFMPEG Path", 
+        "FFMPEG Path",
         value=current_ffmpeg_path,
         help="Path to ffmpeg executable. Leave empty to use the default."
     )
-    
+
     # Save ffmpeg path to config
     if ffmpeg_path != current_ffmpeg_path:
         config.app["ffmpeg_path"] = ffmpeg_path
         if ffmpeg_path and os.path.isfile(ffmpeg_path):
             os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_path
-    
+
     # Get available RAM
     total_ram = psutil.virtual_memory().total / (1024 * 1024 * 1024)  # in GB
-    
+
     # Display RAM limit input
     ram_limit = st.slider(
         "FFMPEG RAM Limit (GB)",
@@ -39,13 +46,13 @@ def add_ffmpeg_settings_to_ui():
         help="Maximum RAM to use for FFMPEG processes. Each FFMPEG process uses about 700-800MB RAM."
     )
     config.app["ffmpeg_ram_limit"] = ram_limit
-    
+
     # Calculate RAM usage per process based on threads
     ram_per_process_mb = 400 + (200 * 2)  # Base 400MB + 200MB per thread (default 2 threads)
-    
+
     # Calculate max processes based on RAM limit
     max_processes = max(1, int((ram_limit * 1024) / ram_per_process_mb))
-    
+
     # Display max processes input
     max_ffmpeg_processes = st.slider(
         "Max FFMPEG Processes",
@@ -56,7 +63,7 @@ def add_ffmpeg_settings_to_ui():
         help=f"Maximum number of FFMPEG processes to run in parallel. Each process uses about {ram_per_process_mb}MB RAM."
     )
     config.app["max_ffmpeg_processes"] = max_ffmpeg_processes
-    
+
     # Display threads per process input
     threads_per_process = st.slider(
         "Threads per FFMPEG Process",
@@ -67,18 +74,18 @@ def add_ffmpeg_settings_to_ui():
         help="Number of threads to use per FFMPEG process. More threads = faster processing but more RAM usage."
     )
     config.app["ffmpeg_threads_per_process"] = threads_per_process
-    
+
     # Recalculate RAM usage per process based on selected threads
     ram_per_process_mb = 400 + (threads_per_process * 200)  # Base 400MB + 200MB per thread
-    
+
     # Display estimated RAM usage
     estimated_ram = (max_ffmpeg_processes * ram_per_process_mb) / 1024  # in GB
     st.info(f"Estimated maximum RAM usage: {estimated_ram:.2f} GB")
-    
+
     # Warning if estimated RAM usage is too high
     if estimated_ram > ram_limit:
         st.warning(f"⚠️ Estimated RAM usage ({estimated_ram:.2f} GB) exceeds your RAM limit ({ram_limit:.2f} GB). Consider reducing the number of processes or threads.")
-    
+
     return {
         "ffmpeg_path": ffmpeg_path,
         "ram_limit": ram_limit,

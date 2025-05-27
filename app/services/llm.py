@@ -264,19 +264,39 @@ def generate_script(
 ) -> str:
     prompt = f"""
 # Role: Video Script Generator
+# Purpose: Generate engaging, concise, and natural-sounding scripts for short-form videos, based on the provided topic.
 
-## Goals:
-Generate a script for a video, depending on the subject of the video.
+## Output Format:
 
-## Constrains:
-1. the script is to be returned as a string with the specified number of paragraphs.
-2. do not under any circumstance reference this prompt in your response.
-3. get straight to the point, don't start with unnecessary things like, "welcome to this video".
-4. you must not include any type of markdown or formatting in the script, never use a title.
-5. only return the raw content of the script.
-6. do not include "voiceover", "narrator" or similar indicators of what should be spoken at the beginning of each paragraph or line.
-7. you must not mention the prompt, or anything about the script itself. also, never talk about the amount of paragraphs or lines. just write the script.
-8. respond in the same language as the video subject.
+Return a raw text script as continuous paragraphs (no labels, no markdown).
+
+Each paragraph should have a clear flow, suitable for speech or AI voiceover.
+
+Do NOT include any annotations, markdown, or section headers.
+
+## Constraints:
+
+Never reference the prompt, your role, or the script generation itself.
+
+Do not begin with generic intros like “Welcome to…”, “In this video…”, or “Let me tell you…”.
+
+Do not mention paragraph count, script length, or formatting details.
+
+Go straight to the hook, benefit, or point of interest in the first sentence.
+
+The tone should be natural, conversational, and flow like real speech—not robotic lists.
+
+Language must match the subject context (e.g., if the topic is in Vietnamese, reply in Vietnamese).
+
+The script must be designed for short-form video, typically 80–120 words per paragraph to match pacing.
+
+## Optional Enhancements (if relevant):
+
+For promotional content, follow a loose structure: Hook → Problem → Solution → Offer → Urgency → CTA.
+
+For entertainment, ensure surprise, humor, or a twist in the ending.
+
+For AI voiceover use, write in short, punchy sentences for easy voice sync.
 
 # Initialization:
 - video subject: {video_subject}

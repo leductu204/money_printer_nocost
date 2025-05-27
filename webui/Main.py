@@ -434,6 +434,15 @@ if not config.app.get("hide_config", False):
             )
             save_keys_to_config("pixabay_api_keys", pixabay_api_key)
 
+            # Add Gemini API Key
+            gemini_api_key = config.app.get("gemini_api_key", "")
+            gemini_api_key = st.text_input(
+                "Gemini API Key", value=gemini_api_key, type="password",
+                help="Get your API key from https://ai.google.dev/"
+            )
+            if gemini_api_key:
+                config.app["gemini_api_key"] = gemini_api_key
+
             # Add FFMPEG settings
             st.markdown("---")
             ffmpeg_settings = add_ffmpeg_settings_to_ui()
@@ -602,12 +611,12 @@ with middle_panel:
     with st.container(border=True):
         st.write(tr("Audio Settings"))
 
-        # Only display OpenAI FM in UI, but keep backend logic for other providers
-        tts_providers_display = ['OpenAI FM']
-        saved_tts_provider = config.app.get("tts_provider", "Azure").lower()
-        saved_tts_provider_index = 0
-        all_providers = ['Azure', 'OpenAI', 'OpenAI FM']
-        for i, provider in enumerate(all_providers):
+        # Display available TTS providers
+        tts_providers_display = ['OpenAI', 'OpenAI FM', 'Gemini']
+        saved_tts_provider = config.app.get("tts_provider", "gemini").lower()
+        saved_tts_provider_index = 2  # Default to Gemini
+
+        for i, provider in enumerate(tts_providers_display):
             if provider.lower() == saved_tts_provider:
                 saved_tts_provider_index = i
                 break
@@ -615,44 +624,99 @@ with middle_panel:
         tts_provider = st.selectbox(
             tr("TTS Provider"),
             options=tts_providers_display,
-            index=0,
+            index=saved_tts_provider_index,
         )
         tts_provider = tts_provider.lower()
         config.app["tts_provider"] = tts_provider
 
-        st.info("""
-        ##### OpenAI FM TTS Configuration
-        - Available voices: alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer, verse
-        - Customize tone below
-        """)
-
-        # For OpenAI FM, we'll use a list of voices specific to OpenAI FM
-        voices = [
-            "openai_fm-alloy-Unisex",
-            "openai_fm-ash-Unisex",
-            "openai_fm-ballad-Unisex",
-            "openai_fm-coral-Unisex",
-            "openai_fm-echo-Unisex",
-            "openai_fm-fable-Unisex",
-            "openai_fm-onyx-Unisex",
-            "openai_fm-nova-Unisex",
-            "openai_fm-sage-Unisex",
-            "openai_fm-shimmer-Unisex",
-            "openai_fm-verse-Unisex"
-        ]
-
-        # Add settings for tone for OpenAI FM as per the provided file
-        tone_options = [
-            "Calm, encouraging, and articulate",
-            "Friendly, clear, and reassuring",
-            "Neutral and informative"
-        ]
-        selected_tone = st.selectbox(
-            tr("Tone and Style"),
-            options=tone_options,
-            index=0,
-        )
-        config.app["openai_fm_tone"] = selected_tone
+        # Display provider-specific information and get voices
+        if tts_provider == "openai":
+            st.info("""
+            ##### OpenAI TTS Configuration
+            - Available voices: alloy, echo, fable, onyx, nova, shimmer
+            - High quality speech synthesis
+            """)
+            voices = [
+                "openai-alloy-Male",
+                "openai-echo-Male",
+                "openai-fable-Female",
+                "openai-onyx-Male",
+                "openai-nova-Female",
+                "openai-shimmer-Female"
+            ]
+        elif tts_provider == "openai fm":
+            st.info("""
+            ##### OpenAI FM TTS Configuration
+            - Available voices: alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer, verse
+            - Customize tone below
+            """)
+            voices = [
+                "openai_fm-alloy-Unisex",
+                "openai_fm-ash-Unisex",
+                "openai_fm-ballad-Unisex",
+                "openai_fm-coral-Unisex",
+                "openai_fm-echo-Unisex",
+                "openai_fm-fable-Unisex",
+                "openai_fm-onyx-Unisex",
+                "openai_fm-nova-Unisex",
+                "openai_fm-sage-Unisex",
+                "openai_fm-shimmer-Unisex",
+                "openai_fm-verse-Unisex"
+            ]
+            # Add settings for tone for OpenAI FM
+            tone_options = [
+                "Calm, encouraging, and articulate",
+                "Friendly, clear, and reassuring",
+                "Neutral and informative"
+            ]
+            selected_tone = st.selectbox(
+                tr("Tone and Style"),
+                options=tone_options,
+                index=0,
+            )
+            config.app["openai_fm_tone"] = selected_tone
+        elif tts_provider == "gemini":
+            st.info("""
+            ##### Gemini TTS Configuration
+            - 30+ high-quality voices available
+            - Supports multiple languages including Vietnamese
+            - Powered by Google's latest TTS technology
+            """)
+            voices = [
+                "gemini-achernar-Unisex",
+                "gemini-achird-Unisex",
+                "gemini-algenib-Unisex",
+                "gemini-algieba-Unisex",
+                "gemini-alnilam-Unisex",
+                "gemini-aoede-Unisex",
+                "gemini-autonoe-Unisex",
+                "gemini-callirrhoe-Unisex",
+                "gemini-charon-Unisex",
+                "gemini-despina-Unisex",
+                "gemini-enceladus-Unisex",
+                "gemini-erinome-Unisex",
+                "gemini-fenrir-Unisex",
+                "gemini-gacrux-Unisex",
+                "gemini-iapetus-Unisex",
+                "gemini-kore-Unisex",
+                "gemini-laomedeia-Unisex",
+                "gemini-leda-Unisex",
+                "gemini-orus-Unisex",
+                "gemini-puck-Unisex",
+                "gemini-pulcherrima-Unisex",
+                "gemini-rasalgethi-Unisex",
+                "gemini-sadachbia-Unisex",
+                "gemini-sadaltager-Unisex",
+                "gemini-schedar-Unisex",
+                "gemini-sulafat-Unisex",
+                "gemini-umbriel-Unisex",
+                "gemini-vindemiatrix-Unisex",
+                "gemini-zephyr-Unisex",
+                "gemini-zubenelgenubi-Unisex"
+            ]
+        else:
+            # Fallback to all voices
+            voices = voice.get_all_voices()
 
         friendly_names = {
             v: v.replace("Female", tr("Female"))
@@ -662,9 +726,20 @@ with middle_panel:
         }
         saved_voice_name = config.ui.get("voice_name", "")
         saved_voice_name_index = 0
+
+        # Set default voice based on provider
+        if not saved_voice_name or saved_voice_name not in voices:
+            if tts_provider == "gemini":
+                saved_voice_name = "gemini-zubenelgenubi-Unisex"
+            elif tts_provider == "openai":
+                saved_voice_name = "openai-alloy-Male"
+            elif tts_provider == "openai fm":
+                saved_voice_name = "openai_fm-fable-Unisex"
+
         if saved_voice_name in friendly_names:
             saved_voice_name_index = list(friendly_names.keys()).index(saved_voice_name)
         else:
+            # Try to find a voice that matches the UI language
             for i, v in enumerate(voices):
                 if (
                     v.lower().startswith(st.session_state["ui_language"].lower())
